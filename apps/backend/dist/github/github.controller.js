@@ -23,6 +23,10 @@ let GithubController = class GithubController {
     getUser(login) {
         return this.githubService.getUserWithRepos(login);
     }
+    getPullRequests(format) {
+        const shouldFormat = format !== 'false';
+        return this.githubService.getPullRequests(null, shouldFormat);
+    }
 };
 exports.GithubController = GithubController;
 __decorate([
@@ -32,6 +36,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], GithubController.prototype, "getUser", null);
+__decorate([
+    (0, common_1.Get)('pull-requests'),
+    __param(0, (0, common_1.Query)('format')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], GithubController.prototype, "getPullRequests", null);
 exports.GithubController = GithubController = __decorate([
     (0, common_1.Controller)('github'),
     __metadata("design:paramtypes", [github_service_1.GithubService])

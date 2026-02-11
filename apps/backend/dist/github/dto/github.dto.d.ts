@@ -20,3 +20,12 @@ export interface GithubUserWithReposDto {
     user: GithubUserDto;
     repos: GithubRepoDto[];
 }
+export interface PullRequestMessageDto {
+    number: number;
+    pullRequest: string;
+}
+export interface PullRequestGroupDto {
+    repository: string;
+    pullRequests: PullRequestMessageDto[];
+}
+export type PullRequestResponseDto = PullRequestGroupDto[] | Record<string, unknown>;

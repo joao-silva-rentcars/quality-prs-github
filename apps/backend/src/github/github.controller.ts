@@ -1,6 +1,9 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { GithubService } from './github.service';
-import { GithubUserWithReposDto } from './dto/github.dto';
+import {
+  GithubUserWithReposDto,
+  PullRequestResponseDto,
+} from './dto/github.dto';
 
 @Controller('github')
 export class GithubController {
@@ -9,5 +12,13 @@ export class GithubController {
   @Get('user/:login')
   getUser(@Param('login') login: string): Promise<GithubUserWithReposDto> {
     return this.githubService.getUserWithRepos(login);
+  }
+
+  @Get('pull-requests')
+  getPullRequests(
+    @Query('format') format?: string,
+  ): Promise<PullRequestResponseDto> {
+    const shouldFormat = format !== 'false';
+    return this.githubService.getPullRequests(null, shouldFormat);
   }
 }
