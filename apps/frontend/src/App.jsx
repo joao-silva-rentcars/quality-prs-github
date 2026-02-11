@@ -75,7 +75,7 @@ function App() {
         <p className="eyebrow">GitHub Explorer</p>
         <h1>Consulta de Pull Requests do GitHub</h1>
         <p className="subtitle">
-          Backend NestJS consumindo a API do GitHub com token opcional.
+          Backend NestJS consumindo a API do GitHub com token.
         </p>
       </header>
 
