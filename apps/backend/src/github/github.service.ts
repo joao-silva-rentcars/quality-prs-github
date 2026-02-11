@@ -49,6 +49,7 @@ interface PullRequestNode {
   url: string;
   title: string;
   bodyText: string;
+  baseRefName: string;
   baseRepository: {
     name: string;
   };
@@ -81,12 +82,14 @@ interface RepoApiResult {
 interface FormattedPullRequest {
   number: number;
   pullRequest: string;
+  baseBranch?: string;
 }
 
 interface SearchPullRequest {
   number: number;
   pullRequest: string;
   labels: string[];
+  baseBranch: string;
 }
 
 interface PullRequestSearchFilters {
@@ -202,7 +205,7 @@ export class GithubService {
     return {
       query:
         '{ search(query: "org:Rentcars is:pr is:open user:Rentcars label:tested", type: ISSUE, last: 50) ' +
-        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRepository { name } labels(first: 10) ' +
+        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
         '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
     };
   }
@@ -210,11 +213,11 @@ export class GithubService {
   private buildPullRequestBodyFromFilters(filters: PullRequestSearchFilters): {
     query: string;
   } {
-    const queryString = this.buildSearchQuery(filters);
+    const queryString = this.escapeGraphqlQuery(this.buildSearchQuery(filters));
     return {
       query:
         `{ search(query: "${queryString}", type: ISSUE, last: 50) ` +
-        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRepository { name } labels(first: 10) ' +
+        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
         '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
     };
   }
@@ -319,6 +322,10 @@ export class GithubService {
     return value.replace(/"/g, '\\"');
   }
 
+  private escapeGraphqlQuery(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
   private formatPullRequestResult(
     result: GraphqlSearchResponse,
   ): PullRequestGroupDto[] {
@@ -370,6 +377,9 @@ export class GithubService {
       ALLOWED_REPOS.map((repo) => repo.toLowerCase()),
     );
     const selectedRepo = this.normalizeRepoFilter(filters.repo);
+    const selectedLabels = (filters.labels ?? []).map((label) =>
+      label.toLowerCase(),
+    );
 
     for (const edge of edges) {
       if (!edge) {
@@ -389,6 +399,18 @@ export class GithubService {
 
       if (!selectedRepo && !allowedRepos.has(repositoryKey)) {
         continue;
+      }
+
+      if (selectedLabels.length > 0) {
+        const prLabels = info.labels.edges.map((label) =>
+          label.node.name.toLowerCase(),
+        );
+        const hasLabel = selectedLabels.some((label) =>
+          prLabels.includes(label),
+        );
+        if (!hasLabel) {
+          continue;
+        }
       }
 
       if (pullRequestsMap.has(repository)) {
@@ -424,6 +446,7 @@ export class GithubService {
     return {
       number: info.number,
       pullRequest: `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}\n*Task*: ${taskPart}\n*Description:* ${descPart}`,
+      baseBranch: info.baseRefName,
     };
   }
 
@@ -444,6 +467,7 @@ export class GithubService {
       number: info.number,
       pullRequest: message,
       labels: info.labels.edges.map((edge) => edge.node.name),
+      baseBranch: info.baseRefName,
     };
   }
 

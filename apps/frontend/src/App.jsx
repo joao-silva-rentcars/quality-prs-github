@@ -264,6 +264,7 @@ function App() {
                   {group.pullRequests.map((item) => {
                     const parsed = parsePullRequestMessage(item.pullRequest)
                     const labels = normalizeLabels(item.labels)
+                    const baseBranch = item.baseBranch
                     return (
                       <li key={`${group.repository}-${item.number}`}>
                         <div className="pr-item">
@@ -282,6 +283,11 @@ function App() {
                             {parsed.description && (
                               <p className="muted">
                                 {parsed.description}
+                              </p>
+                            )}
+                            {baseBranch && (
+                              <p className="muted">
+                                Base: <strong>{baseBranch}</strong>
                               </p>
                             )}
                             {labels.length > 0 && (

@@ -101,15 +101,15 @@ let GithubService = class GithubService {
     buildPullRequestBody() {
         return {
             query: '{ search(query: "org:Rentcars is:pr is:open user:Rentcars label:tested", type: ISSUE, last: 50) ' +
-                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRepository { name } labels(first: 10) ' +
+                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
                 '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
         };
     }
     buildPullRequestBodyFromFilters(filters) {
-        const queryString = this.buildSearchQuery(filters);
+        const queryString = this.escapeGraphqlQuery(this.buildSearchQuery(filters));
         return {
             query: `{ search(query: "${queryString}", type: ISSUE, last: 50) ` +
-                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRepository { name } labels(first: 10) ' +
+                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
                 '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
         };
     }
@@ -188,6 +188,9 @@ let GithubService = class GithubService {
     escapeQueryValue(value) {
         return value.replace(/"/g, '\\"');
     }
+    escapeGraphqlQuery(value) {
+        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
     formatPullRequestResult(result) {
         const edges = result.data
             ?.search?.edges ?? [result.data?.repository?.pullRequest ?? null];
@@ -225,6 +228,7 @@ let GithubService = class GithubService {
         const pullRequestsMap = new Map();
         const allowedRepos = new Set(ALLOWED_REPOS.map((repo) => repo.toLowerCase()));
         const selectedRepo = this.normalizeRepoFilter(filters.repo);
+        const selectedLabels = (filters.labels ?? []).map((label) => label.toLowerCase());
         for (const edge of edges) {
             if (!edge) {
                 continue;
@@ -240,6 +244,13 @@ let GithubService = class GithubService {
             }
             if (!selectedRepo && !allowedRepos.has(repositoryKey)) {
                 continue;
+            }
+            if (selectedLabels.length > 0) {
+                const prLabels = info.labels.edges.map((label) => label.node.name.toLowerCase());
+                const hasLabel = selectedLabels.some((label) => prLabels.includes(label));
+                if (!hasLabel) {
+                    continue;
+                }
             }
             if (pullRequestsMap.has(repository)) {
                 pullRequestsMap.get(repository)?.push(message);
@@ -267,6 +278,7 @@ let GithubService = class GithubService {
         return {
             number: info.number,
             pullRequest: `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}\n*Task*: ${taskPart}\n*Description:* ${descPart}`,
+            baseBranch: info.baseRefName,
         };
     }
     formatSearchMessage(info) {
@@ -282,6 +294,7 @@ let GithubService = class GithubService {
             number: info.number,
             pullRequest: message,
             labels: info.labels.edges.map((edge) => edge.node.name),
+            baseBranch: info.baseRefName,
         };
     }
     normalizeRepoFilter(repo) {

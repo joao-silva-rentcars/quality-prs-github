@@ -27,6 +27,7 @@ export interface PullRequestMessageDto {
   number: number;
   pullRequest: string;
   labels?: string[];
+  baseBranch?: string;
 }
 
 export interface PullRequestGroupDto {

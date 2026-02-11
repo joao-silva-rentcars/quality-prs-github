@@ -27,6 +27,7 @@ export declare class GithubService {
     private buildSearchQuery;
     private buildDateRange;
     private escapeQueryValue;
+    private escapeGraphqlQuery;
     private formatPullRequestResult;
     private formatSearchResult;
     private formatValidMessage;
