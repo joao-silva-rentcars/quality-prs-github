@@ -3,7 +3,7 @@ import './App.css'
 
 function App() {
   const apiBaseUrl =
-    import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+    import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
   const [pullRequests, setPullRequests] = useState([])
   const [pullError, setPullError] = useState('')
   const [pullLoading, setPullLoading] = useState(false)
