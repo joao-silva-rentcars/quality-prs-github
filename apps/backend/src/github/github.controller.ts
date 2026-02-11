@@ -5,6 +5,19 @@ import {
   PullRequestResponseDto,
 } from './dto/github.dto';
 
+interface PullRequestSearchQuery {
+  org?: string;
+  user?: string;
+  repo?: string;
+  state?: 'open' | 'closed' | 'merged';
+  labels?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+  format?: string;
+}
+
 @Controller('github')
 export class GithubController {
   constructor(private readonly githubService: GithubService) {}
@@ -20,5 +33,33 @@ export class GithubController {
   ): Promise<PullRequestResponseDto> {
     const shouldFormat = format !== 'false';
     return this.githubService.getPullRequests(null, shouldFormat);
+  }
+
+  @Get('pull-requests/search')
+  getPullRequestsBySearch(
+    @Query() query: PullRequestSearchQuery,
+  ): Promise<PullRequestResponseDto> {
+    const shouldFormat = query.format !== 'false';
+    const labels = query.labels
+      ? query.labels
+          .split(',')
+          .map((label) => label.trim())
+          .filter(Boolean)
+      : undefined;
+
+    return this.githubService.getPullRequestsBySearch(
+      {
+        org: query.org,
+        user: query.user,
+        repo: query.repo,
+        state: query.state,
+        labels,
+        createdFrom: query.createdFrom,
+        createdTo: query.createdTo,
+        updatedFrom: query.updatedFrom,
+        updatedTo: query.updatedTo,
+      },
+      shouldFormat,
+    );
   }
 }

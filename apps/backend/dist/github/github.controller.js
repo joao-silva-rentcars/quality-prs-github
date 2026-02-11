@@ -27,6 +27,26 @@ let GithubController = class GithubController {
         const shouldFormat = format !== 'false';
         return this.githubService.getPullRequests(null, shouldFormat);
     }
+    getPullRequestsBySearch(query) {
+        const shouldFormat = query.format !== 'false';
+        const labels = query.labels
+            ? query.labels
+                .split(',')
+                .map((label) => label.trim())
+                .filter(Boolean)
+            : undefined;
+        return this.githubService.getPullRequestsBySearch({
+            org: query.org,
+            user: query.user,
+            repo: query.repo,
+            state: query.state,
+            labels,
+            createdFrom: query.createdFrom,
+            createdTo: query.createdTo,
+            updatedFrom: query.updatedFrom,
+            updatedTo: query.updatedTo,
+        }, shouldFormat);
+    }
 };
 exports.GithubController = GithubController;
 __decorate([
@@ -43,6 +63,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], GithubController.prototype, "getPullRequests", null);
+__decorate([
+    (0, common_1.Get)('pull-requests/search'),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], GithubController.prototype, "getPullRequestsBySearch", null);
 exports.GithubController = GithubController = __decorate([
     (0, common_1.Controller)('github'),
     __metadata("design:paramtypes", [github_service_1.GithubService])

@@ -26,6 +26,7 @@ export interface GithubUserWithReposDto {
 export interface PullRequestMessageDto {
   number: number;
   pullRequest: string;
+  labels?: string[];
 }
 
 export interface PullRequestGroupDto {

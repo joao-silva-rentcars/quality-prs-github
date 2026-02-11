@@ -13,6 +13,18 @@ const PULL_REQUEST_MERGEABLE = 'MERGEABLE';
 const PULL_REQUEST_BLOCKED = 'BLOCKED';
 const TESTED_LABEL = 'tested';
 const SPECIAL_CASE_LABELS = ['special case'];
+const DEFAULT_ORG = 'Rentcars';
+const ALLOWED_REPOS = [
+  'rentcars',
+  'site',
+  'front-mobile',
+  'rentcars-site',
+  'qa-automation-web',
+  'app-android',
+  'components',
+  'app-ios',
+  'booking-api',
+];
 
 interface GraphqlSearchResponse {
   data?: {
@@ -71,12 +83,30 @@ interface FormattedPullRequest {
   pullRequest: string;
 }
 
+interface SearchPullRequest {
+  number: number;
+  pullRequest: string;
+  labels: string[];
+}
+
+interface PullRequestSearchFilters {
+  org?: string;
+  user?: string;
+  repo?: string;
+  state?: 'open' | 'closed' | 'merged';
+  labels?: string[];
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+}
+
 @Injectable()
 export class GithubService {
   private readonly octokit: Octokit;
 
   constructor(private readonly configService: ConfigService) {
-    const token = process.env.GITHUB_TOKEN;
+    const token = this.configService.get<string>('GITHUB_TOKEN');
     this.octokit = new Octokit(token ? { auth: token } : undefined);
   }
 
@@ -107,25 +137,23 @@ export class GithubService {
     query: Record<string, unknown> | null = null,
     format = true,
   ): Promise<PullRequestResponseDto> {
-    const configuredUrl = process.env.GITHUB_URL;
-    const url =
-      configuredUrl && configuredUrl.trim().length > 0
-        ? configuredUrl
-        : 'https://api.github.com/graphql';
-    const token = process.env.GITHUB_TOKEN;
-
-    const result = (await fetch(url, {
-      body: JSON.stringify(query ?? this.buildPullRequestBody()),
-      method: 'POST',
-      headers: {
-        Authorization: token ? `Bearer ${token}` : '',
-        'Content-Type': 'application/json',
-      },
-    }).then((res) => res.json())) as GraphqlSearchResponse;
-
+    const result = await this.executeGraphqlQuery(
+      query ?? this.buildPullRequestBody(),
+    );
     const rawResult = result as Record<string, unknown>;
 
     return format ? this.formatPullRequestResult(result) : rawResult;
+  }
+
+  async getPullRequestsBySearch(
+    filters: PullRequestSearchFilters,
+    format = true,
+  ): Promise<PullRequestResponseDto> {
+    const query = this.buildPullRequestBodyFromFilters(filters);
+    const result = await this.executeGraphqlQuery(query);
+    const rawResult = result as Record<string, unknown>;
+
+    return format ? this.formatSearchResult(result, filters) : rawResult;
   }
 
   private mapUser(user: {
@@ -179,6 +207,118 @@ export class GithubService {
     };
   }
 
+  private buildPullRequestBodyFromFilters(filters: PullRequestSearchFilters): {
+    query: string;
+  } {
+    const queryString = this.buildSearchQuery(filters);
+    return {
+      query:
+        `{ search(query: "${queryString}", type: ISSUE, last: 50) ` +
+        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRepository { name } labels(first: 10) ' +
+        '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
+    };
+  }
+
+  private async executeGraphqlQuery(
+    query: Record<string, unknown>,
+  ): Promise<GraphqlSearchResponse> {
+    const configuredUrl = this.configService.get<string>('GITHUB_URL');
+    const url =
+      configuredUrl && configuredUrl.trim().length > 0
+        ? configuredUrl
+        : 'https://api.github.com/graphql';
+    const token = this.configService.get<string>('GITHUB_TOKEN');
+
+    return (await fetch(url, {
+      body: JSON.stringify(query),
+      method: 'POST',
+      headers: {
+        Authorization: token ? `Bearer ${token}` : '',
+        'Content-Type': 'application/json',
+      },
+    }).then((res) => res.json())) as GraphqlSearchResponse;
+  }
+
+  private buildSearchQuery(filters: PullRequestSearchFilters): string {
+    const parts = ['is:pr'];
+    const orgValue = filters.org ?? DEFAULT_ORG;
+
+    if (orgValue) {
+      parts.push(`org:${orgValue}`);
+    }
+
+    if (filters.repo) {
+      const repoValue = filters.repo.includes('/')
+        ? filters.repo.split('/')[1]
+        : filters.repo;
+      const normalizedRepo = repoValue.toLowerCase();
+
+      if (!ALLOWED_REPOS.includes(normalizedRepo)) {
+        parts.push(`repo:${orgValue}/__invalid__`);
+      } else {
+        parts.push(`repo:${orgValue}/${normalizedRepo}`);
+      }
+    }
+
+    if (filters.state === 'open') {
+      parts.push('is:open');
+    } else if (filters.state === 'merged') {
+      parts.push('is:merged');
+    } else if (filters.state === 'closed') {
+      parts.push('is:closed');
+    }
+
+    if (filters.labels && filters.labels.length > 0) {
+      for (const label of filters.labels) {
+        if (label) {
+          const safeLabel = this.escapeQueryValue(label);
+          parts.push(`label:"${safeLabel}"`);
+        }
+      }
+    }
+
+    const createdRange = this.buildDateRange(
+      'created',
+      filters.createdFrom,
+      filters.createdTo,
+    );
+    if (createdRange) {
+      parts.push(createdRange);
+    }
+
+    const updatedRange = this.buildDateRange(
+      'updated',
+      filters.updatedFrom,
+      filters.updatedTo,
+    );
+    if (updatedRange) {
+      parts.push(updatedRange);
+    }
+
+    return parts.join(' ');
+  }
+
+  private buildDateRange(
+    field: 'created' | 'updated',
+    start?: string,
+    end?: string,
+  ): string | null {
+    if (start && end) {
+      return `${field}:${start}..${end}`;
+    }
+    if (start) {
+      return `${field}:>=${start}`;
+    }
+    if (end) {
+      return `${field}:<=${end}`;
+    }
+    return null;
+  }
+
+  private escapeQueryValue(value: string): string {
+    return value.replace(/"/g, '\\"');
+  }
+
   private formatPullRequestResult(
     result: GraphqlSearchResponse,
   ): PullRequestGroupDto[] {
@@ -219,6 +359,51 @@ export class GithubService {
     }));
   }
 
+  private formatSearchResult(
+    result: GraphqlSearchResponse,
+    filters: PullRequestSearchFilters,
+  ): PullRequestGroupDto[] {
+    const edges: Array<PullRequestEdge | PullRequestNode | null> = result.data
+      ?.search?.edges ?? [result.data?.repository?.pullRequest ?? null];
+    const pullRequestsMap = new Map<string, SearchPullRequest[]>();
+    const allowedRepos = new Set(
+      ALLOWED_REPOS.map((repo) => repo.toLowerCase()),
+    );
+    const selectedRepo = this.normalizeRepoFilter(filters.repo);
+
+    for (const edge of edges) {
+      if (!edge) {
+        continue;
+      }
+
+      const info: PullRequestNode = this.isPullRequestEdge(edge)
+        ? edge.node
+        : edge;
+      const message = this.formatSearchMessage(info);
+      const repository = info.baseRepository.name;
+      const repositoryKey = repository.toLowerCase();
+
+      if (selectedRepo && repositoryKey !== selectedRepo) {
+        continue;
+      }
+
+      if (!selectedRepo && !allowedRepos.has(repositoryKey)) {
+        continue;
+      }
+
+      if (pullRequestsMap.has(repository)) {
+        pullRequestsMap.get(repository)?.push(message);
+      } else {
+        pullRequestsMap.set(repository, [message]);
+      }
+    }
+
+    return Array.from(pullRequestsMap, ([repository, pullRequests]) => ({
+      repository,
+      pullRequests,
+    }));
+  }
+
   private formatValidMessage(
     info: PullRequestNode,
   ): FormattedPullRequest | false {
@@ -240,6 +425,35 @@ export class GithubService {
       number: info.number,
       pullRequest: `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}\n*Task*: ${taskPart}\n*Description:* ${descPart}`,
     };
+  }
+
+  private formatSearchMessage(info: PullRequestNode): SearchPullRequest {
+    let message = `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}`;
+
+    if (
+      info.bodyText.includes('Task') &&
+      info.bodyText.includes('Description')
+    ) {
+      const [taskPart, descPart] = info.bodyText
+        .split('Task')[1]
+        .split('Description');
+      message += `\n*Task*: ${taskPart}\n*Description:* ${descPart}`;
+    }
+
+    return {
+      number: info.number,
+      pullRequest: message,
+      labels: info.labels.edges.map((edge) => edge.node.name),
+    };
+  }
+
+  private normalizeRepoFilter(repo?: string): string | null {
+    if (!repo) {
+      return null;
+    }
+
+    const repoValue = repo.includes('/') ? repo.split('/')[1] : repo;
+    return repoValue.toLowerCase();
   }
 
   private isValidPullRequest(info: PullRequestNode): boolean {
