@@ -13,9 +13,10 @@ interface PullRequestSearchFilters {
 }
 export declare class GithubService {
     private readonly configService;
-    private readonly octokit;
+    private octokitPromise;
     constructor(configService: ConfigService);
     getUserWithRepos(login: string): Promise<GithubUserWithReposDto>;
+    private getOctokit;
     getPullRequests(query?: Record<string, unknown> | null, format?: boolean): Promise<PullRequestResponseDto>;
     getPullRequestsBySearch(filters: PullRequestSearchFilters, format?: boolean): Promise<PullRequestResponseDto>;
     private mapUser;

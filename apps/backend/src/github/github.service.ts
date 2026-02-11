@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Octokit } from '@octokit/rest';
 import {
   GithubRepoDto,
   GithubUserDto,
@@ -106,18 +105,17 @@ interface PullRequestSearchFilters {
 
 @Injectable()
 export class GithubService {
-  private readonly octokit: Octokit;
+  private octokitPromise: Promise<import('@octokit/rest').Octokit> | null =
+    null;
 
-  constructor(private readonly configService: ConfigService) {
-    const token = this.configService.get<string>('GITHUB_TOKEN');
-    this.octokit = new Octokit(token ? { auth: token } : undefined);
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   async getUserWithRepos(login: string): Promise<GithubUserWithReposDto> {
     try {
+      const octokit = await this.getOctokit();
       const [userResponse, reposResponse] = await Promise.all([
-        this.octokit.rest.users.getByUsername({ username: login }),
-        this.octokit.rest.repos.listForUser({
+        octokit.rest.users.getByUsername({ username: login }),
+        octokit.rest.repos.listForUser({
           username: login,
           per_page: 50,
           sort: 'updated',
@@ -134,6 +132,17 @@ export class GithubService {
       }
       throw error;
     }
+  }
+
+  private async getOctokit(): Promise<import('@octokit/rest').Octokit> {
+    if (!this.octokitPromise) {
+      const token = this.configService.get<string>('GITHUB_TOKEN');
+      this.octokitPromise = import('@octokit/rest').then(
+        ({ Octokit }) => new Octokit(token ? { auth: token } : undefined),
+      );
+    }
+
+    return this.octokitPromise;
   }
 
   async getPullRequests(

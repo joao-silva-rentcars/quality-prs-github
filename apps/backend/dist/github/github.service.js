@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GithubService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const rest_1 = require("@octokit/rest");
 const PULL_REQUEST_MERGEABLE = 'MERGEABLE';
 const PULL_REQUEST_BLOCKED = 'BLOCKED';
 const TESTED_LABEL = 'tested';
@@ -31,17 +30,16 @@ const ALLOWED_REPOS = [
 ];
 let GithubService = class GithubService {
     configService;
-    octokit;
+    octokitPromise = null;
     constructor(configService) {
         this.configService = configService;
-        const token = this.configService.get('GITHUB_TOKEN');
-        this.octokit = new rest_1.Octokit(token ? { auth: token } : undefined);
     }
     async getUserWithRepos(login) {
         try {
+            const octokit = await this.getOctokit();
             const [userResponse, reposResponse] = await Promise.all([
-                this.octokit.rest.users.getByUsername({ username: login }),
-                this.octokit.rest.repos.listForUser({
+                octokit.rest.users.getByUsername({ username: login }),
+                octokit.rest.repos.listForUser({
                     username: login,
                     per_page: 50,
                     sort: 'updated',
@@ -58,6 +56,13 @@ let GithubService = class GithubService {
             }
             throw error;
         }
+    }
+    async getOctokit() {
+        if (!this.octokitPromise) {
+            const token = this.configService.get('GITHUB_TOKEN');
+            this.octokitPromise = import('@octokit/rest').then(({ Octokit }) => new Octokit(token ? { auth: token } : undefined));
+        }
+        return this.octokitPromise;
     }
     async getPullRequests(query = null, format = true) {
         const result = await this.executeGraphqlQuery(query ?? this.buildPullRequestBody());
