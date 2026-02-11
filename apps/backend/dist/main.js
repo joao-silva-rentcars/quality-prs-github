@@ -8,7 +8,7 @@ async function bootstrap() {
         origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
     });
     const port = Number(process.env.PORT ?? 3000);
-    await app.listen(port);
+    await app.listen(port, '0.0.0.0');
 }
 bootstrap();
 //# sourceMappingURL=main.js.map
