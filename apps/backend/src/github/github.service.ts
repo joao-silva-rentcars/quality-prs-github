@@ -209,6 +209,10 @@ export class GithubService {
       }
     }
 
+    if (pullRequestsMap.size === 0) {
+      return [];
+    }
+
     return Array.from(pullRequestsMap, ([repository, pullRequests]) => ({
       repository,
       pullRequests,

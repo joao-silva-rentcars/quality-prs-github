@@ -7,6 +7,7 @@ function App() {
   const [pullRequests, setPullRequests] = useState([])
   const [pullError, setPullError] = useState('')
   const [pullLoading, setPullLoading] = useState(false)
+  const [pullLoaded, setPullLoaded] = useState(false)
 
   const parsePullRequestMessage = (text) => {
     const urlMatch = text.match(/https?:\/\/\S+/)
@@ -41,6 +42,7 @@ function App() {
       setPullError(err instanceof Error ? err.message : 'Erro inesperado.')
     } finally {
       setPullLoading(false)
+      setPullLoaded(true)
     }
   }
 
@@ -71,8 +73,8 @@ function App() {
           </button>
         </div>
         {pullError && <p className="error">{pullError}</p>}
-        {!pullLoading && pullRequests.length === 0 && !pullError && (
-          <p className="muted">Sem PRs para exibir.</p>
+        {!pullLoading && pullLoaded && pullRequests.length === 0 && !pullError && (
+          <p className="muted">Não há PRs disponíveis no momento.</p>
         )}
       </section>
 

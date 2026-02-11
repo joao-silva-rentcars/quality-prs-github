@@ -122,6 +122,9 @@ let GithubService = class GithubService {
                 pullRequestsMap.set(repository, [message]);
             }
         }
+        if (pullRequestsMap.size === 0) {
+            return [];
+        }
         return Array.from(pullRequestsMap, ([repository, pullRequests]) => ({
             repository,
             pullRequests,
