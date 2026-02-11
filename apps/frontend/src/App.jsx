@@ -61,7 +61,7 @@ function App() {
           <div>
             <h2>Pull requests qualificados</h2>
             <p className="muted">
-              Mostra PRs que passam nos critérios de qualidade do backend.
+              Mostra PRs que passam nos critérios para realização do deploy.
             </p>
           </div>
           <button
