@@ -29,7 +29,7 @@ let GithubController = class GithubController {
     }
     getPullRequestsBySearch(query) {
         const shouldFormat = query.format !== 'false';
-        const labels = query.labels
+        const labels = query.labels?.trim()
             ? query.labels
                 .split(',')
                 .map((label) => label.trim())
@@ -41,6 +41,7 @@ let GithubController = class GithubController {
             repo: query.repo,
             state: query.state,
             labels,
+            environment: query.environment,
             createdFrom: query.createdFrom,
             createdTo: query.createdTo,
             updatedFrom: query.updatedFrom,

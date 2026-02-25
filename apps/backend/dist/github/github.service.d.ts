@@ -6,6 +6,7 @@ interface PullRequestSearchFilters {
     repo?: string;
     state?: 'open' | 'closed' | 'merged';
     labels?: string[];
+    environment?: string;
     createdFrom?: string;
     createdTo?: string;
     updatedFrom?: string;

@@ -27,7 +27,18 @@ const ALLOWED_REPOS = [
     'components',
     'app-ios',
     'booking-api',
+    'responsive-entrypages',
 ];
+const ENVIRONMENT_BRANCHES = {
+    Production: ['main', 'master', 'Production', 'Master'],
+    Stage: ['staging', 'stage'],
+    Integration: ['integration', 'develop', 'dev'],
+};
+const ENVIRONMENT_QUERY_BRANCH = {
+    Production: 'master',
+    Stage: 'staging',
+    Integration: 'integration',
+};
 let GithubService = class GithubService {
     configService;
     octokitPromise = null;
@@ -160,6 +171,12 @@ let GithubService = class GithubService {
         else if (filters.state === 'closed') {
             parts.push('is:closed');
         }
+        if (filters.environment) {
+            const queryBranch = ENVIRONMENT_QUERY_BRANCH[filters.environment];
+            if (queryBranch) {
+                parts.push(`base:${queryBranch}`);
+            }
+        }
         if (filters.labels && filters.labels.length > 0) {
             for (const label of filters.labels) {
                 if (label) {
@@ -255,6 +272,16 @@ let GithubService = class GithubService {
                 const hasLabel = selectedLabels.some((label) => prLabels.includes(label));
                 if (!hasLabel) {
                     continue;
+                }
+            }
+            if (filters.environment) {
+                const allowedBranches = ENVIRONMENT_BRANCHES[filters.environment];
+                if (allowedBranches) {
+                    const baseBranch = info.baseRefName?.toLowerCase() ?? '';
+                    const matchesEnvironment = allowedBranches.some((branch) => branch.toLowerCase() === baseBranch);
+                    if (!matchesEnvironment) {
+                        continue;
+                    }
                 }
             }
             if (pullRequestsMap.has(repository)) {

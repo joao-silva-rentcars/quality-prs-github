@@ -3,7 +3,7 @@ import './App.css'
 
 function App() {
   const apiBaseUrl =
-    import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+    import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
   const [pullRequests, setPullRequests] = useState([])
   const [pullError, setPullError] = useState('')
   const [pullLoading, setPullLoading] = useState(false)
@@ -14,6 +14,7 @@ function App() {
   const [state, setState] = useState('closed')
   const [createdFrom, setCreatedFrom] = useState('')
   const [createdTo, setCreatedTo] = useState('')
+  const [environment, setEnvironment] = useState('')
   const [selectedLabels, setSelectedLabels] = useState([])
 
   const labelOptions = ['bug', 'bugfix', 'tested', 'special case']
@@ -28,6 +29,7 @@ function App() {
     { value: 'components', label: 'components' },
     { value: 'app-ios', label: 'app-ios' },
     { value: 'booking-api', label: 'booking-api' },
+    { value: 'responsive-entrypages', label: 'responsive-entrypages' },
   ]
 
   const parsePullRequestMessage = (text) => {
@@ -68,6 +70,7 @@ function App() {
     }
     if (createdFrom) params.set('createdFrom', createdFrom)
     if (createdTo) params.set('createdTo', createdTo)
+    if (environment) params.set('environment', environment)
     return params.toString()
   }
 
@@ -205,6 +208,18 @@ function App() {
                 <option value="open">Open</option>
                 <option value="closed">Closed</option>
                 <option value="merged">Merged</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Ambiente</label>
+              <select
+                value={environment}
+                onChange={(event) => setEnvironment(event.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="Production">Production</option>
+                <option value="Stage">Stage</option>
+                <option value="Integration">Integration</option>
               </select>
             </div>
             <div className="field">

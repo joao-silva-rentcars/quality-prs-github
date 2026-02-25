@@ -23,6 +23,7 @@ const ALLOWED_REPOS = [
   'components',
   'app-ios',
   'booking-api',
+  'responsive-entrypages',
 ];
 
 interface GraphqlSearchResponse {
@@ -91,12 +92,26 @@ interface SearchPullRequest {
   baseBranch: string;
 }
 
+const ENVIRONMENT_BRANCHES: Record<string, string[]> = {
+  Production: ['main', 'master', 'Production', 'Master'],
+  Stage: ['staging', 'stage'],
+  Integration: ['integration', 'develop', 'dev'],
+};
+
+/** Base branch usada na query do GitHub (uma por ambiente, a API não aceita OR) */
+const ENVIRONMENT_QUERY_BRANCH: Record<string, string> = {
+  Production: 'master',
+  Stage: 'staging',
+  Integration: 'integration',
+};
+
 interface PullRequestSearchFilters {
   org?: string;
   user?: string;
   repo?: string;
   state?: 'open' | 'closed' | 'merged';
   labels?: string[];
+  environment?: string;
   createdFrom?: string;
   createdTo?: string;
   updatedFrom?: string;
@@ -280,6 +295,13 @@ export class GithubService {
       parts.push('is:closed');
     }
 
+    if (filters.environment) {
+      const queryBranch = ENVIRONMENT_QUERY_BRANCH[filters.environment];
+      if (queryBranch) {
+        parts.push(`base:${queryBranch}`);
+      }
+    }
+
     if (filters.labels && filters.labels.length > 0) {
       for (const label of filters.labels) {
         if (label) {
@@ -419,6 +441,19 @@ export class GithubService {
         );
         if (!hasLabel) {
           continue;
+        }
+      }
+
+      if (filters.environment) {
+        const allowedBranches = ENVIRONMENT_BRANCHES[filters.environment];
+        if (allowedBranches) {
+          const baseBranch = info.baseRefName?.toLowerCase() ?? '';
+          const matchesEnvironment = allowedBranches.some(
+            (branch) => branch.toLowerCase() === baseBranch,
+          );
+          if (!matchesEnvironment) {
+            continue;
+          }
         }
       }
 

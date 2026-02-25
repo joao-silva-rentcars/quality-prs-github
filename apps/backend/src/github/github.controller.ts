@@ -11,6 +11,7 @@ interface PullRequestSearchQuery {
   repo?: string;
   state?: 'open' | 'closed' | 'merged';
   labels?: string;
+  environment?: string;
   createdFrom?: string;
   createdTo?: string;
   updatedFrom?: string;
@@ -40,7 +41,7 @@ export class GithubController {
     @Query() query: PullRequestSearchQuery,
   ): Promise<PullRequestResponseDto> {
     const shouldFormat = query.format !== 'false';
-    const labels = query.labels
+    const labels = query.labels?.trim()
       ? query.labels
           .split(',')
           .map((label) => label.trim())
@@ -54,6 +55,7 @@ export class GithubController {
         repo: query.repo,
         state: query.state,
         labels,
+        environment: query.environment,
         createdFrom: query.createdFrom,
         createdTo: query.createdTo,
         updatedFrom: query.updatedFrom,
