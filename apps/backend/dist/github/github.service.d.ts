@@ -20,6 +20,9 @@ export declare class GithubService {
     private getOctokit;
     getPullRequests(query?: Record<string, unknown> | null, format?: boolean): Promise<PullRequestResponseDto>;
     getPullRequestsBySearch(filters: PullRequestSearchFilters, format?: boolean): Promise<PullRequestResponseDto>;
+    private fetchSearchWithPagination;
+    private searchByRepo;
+    private mergeSearchResults;
     private mapUser;
     private mapRepo;
     private isNotFound;

@@ -26,10 +26,16 @@ const ALLOWED_REPOS = [
   'responsive-entrypages',
 ];
 
+interface SearchPageInfo {
+  endCursor?: string | null;
+  hasNextPage?: boolean;
+}
+
 interface GraphqlSearchResponse {
   data?: {
     search?: {
       edges?: Array<PullRequestEdge | PullRequestNode | null>;
+      pageInfo?: SearchPageInfo;
     };
     repository?: {
       pullRequest?: PullRequestNode;
@@ -46,6 +52,7 @@ interface PullRequestLabelEdge {
 interface PullRequestNode {
   number: number;
   createdAt: string;
+  mergedAt?: string | null;
   url: string;
   title: string;
   bodyText: string;
@@ -83,6 +90,7 @@ interface FormattedPullRequest {
   number: number;
   pullRequest: string;
   baseBranch?: string;
+  mergedAt?: string | null;
 }
 
 interface SearchPullRequest {
@@ -90,6 +98,7 @@ interface SearchPullRequest {
   pullRequest: string;
   labels: string[];
   baseBranch: string;
+  mergedAt?: string | null;
 }
 
 const ENVIRONMENT_BRANCHES: Record<string, string[]> = {
@@ -176,11 +185,68 @@ export class GithubService {
     filters: PullRequestSearchFilters,
     format = true,
   ): Promise<PullRequestResponseDto> {
-    const query = this.buildPullRequestBodyFromFilters(filters);
-    const result = await this.executeGraphqlQuery(query);
+    const noRepoSelected = !filters.repo?.trim();
+    const noLabelsSelected = !filters.labels || filters.labels.length === 0;
+
+    if (noRepoSelected && noLabelsSelected) {
+      const results = await Promise.all(
+        ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })),
+      );
+      const merged = this.mergeSearchResults(results);
+      const rawResult = merged as Record<string, unknown>;
+      return format ? this.formatSearchResult(merged, filters) : rawResult;
+    }
+
+    const result = await this.fetchSearchWithPagination(filters);
     const rawResult = result as Record<string, unknown>;
 
     return format ? this.formatSearchResult(result, filters) : rawResult;
+  }
+
+  private async fetchSearchWithPagination(
+    filters: PullRequestSearchFilters,
+  ): Promise<GraphqlSearchResponse> {
+    const allEdges: Array<PullRequestEdge | PullRequestNode | null> = [];
+    const maxPages = 5;
+    let after: string | null = null;
+
+    for (let page = 0; page < maxPages; page++) {
+      const query = this.buildPullRequestBodyFromFilters(filters, after);
+      const result = await this.executeGraphqlQuery(query);
+      const edges = result.data?.search?.edges ?? [];
+      allEdges.push(...edges);
+
+      const hasNextPage = result.data?.search?.pageInfo?.hasNextPage;
+      const endCursor = result.data?.search?.pageInfo?.endCursor;
+
+      if (!hasNextPage || !endCursor || edges.length < 100) {
+        break;
+      }
+      after = endCursor;
+    }
+
+    return { data: { search: { edges: allEdges } } };
+  }
+
+  private async searchByRepo(
+    filters: PullRequestSearchFilters,
+  ): Promise<GraphqlSearchResponse> {
+    return this.fetchSearchWithPagination(filters);
+  }
+
+  private mergeSearchResults(
+    responses: GraphqlSearchResponse[],
+  ): GraphqlSearchResponse {
+    const allEdges: Array<PullRequestEdge | PullRequestNode | null> = [];
+    for (const res of responses) {
+      const edges = res.data?.search?.edges ?? [];
+      allEdges.push(...edges);
+    }
+    return {
+      data: {
+        search: { edges: allEdges },
+      },
+    };
   }
 
   private mapUser(user: {
@@ -229,20 +295,24 @@ export class GithubService {
     return {
       query:
         '{ search(query: "org:Rentcars is:pr is:open user:Rentcars label:tested", type: ISSUE, last: 50) ' +
-        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
+        '{ edges { node { ... on PullRequest { number createdAt mergedAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
         '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
     };
   }
 
-  private buildPullRequestBodyFromFilters(filters: PullRequestSearchFilters): {
-    query: string;
-  } {
+  private buildPullRequestBodyFromFilters(
+    filters: PullRequestSearchFilters,
+    after?: string | null,
+  ): { query: string } {
     const queryString = this.escapeGraphqlQuery(this.buildSearchQuery(filters));
+    const afterArg = after
+      ? `, after: "${this.escapeGraphqlQuery(after)}"`
+      : '';
     return {
       query:
-        `{ search(query: "${queryString}", type: ISSUE, last: 50) ` +
-        '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
-        '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
+        `{ search(query: "${queryString}", type: ISSUE, first: 100${afterArg}) ` +
+        '{ edges { node { ... on PullRequest { number createdAt mergedAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
+        '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } pageInfo { endCursor hasNextPage } } }',
     };
   }
 
@@ -311,13 +381,19 @@ export class GithubService {
       }
     }
 
-    const createdRange = this.buildDateRange(
-      'created',
+    const dateField =
+      filters.state === 'merged'
+        ? 'merged'
+        : filters.state === 'closed'
+          ? 'closed'
+          : 'created';
+    const dateRange = this.buildDateRange(
+      dateField,
       filters.createdFrom,
       filters.createdTo,
     );
-    if (createdRange) {
-      parts.push(createdRange);
+    if (dateRange) {
+      parts.push(dateRange);
     }
 
     const updatedRange = this.buildDateRange(
@@ -333,7 +409,7 @@ export class GithubService {
   }
 
   private buildDateRange(
-    field: 'created' | 'updated',
+    field: 'created' | 'updated' | 'merged' | 'closed',
     start?: string,
     end?: string,
   ): string | null {
@@ -491,11 +567,15 @@ export class GithubService {
       number: info.number,
       pullRequest: `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}\n*Task*: ${taskPart}\n*Description:* ${descPart}`,
       baseBranch: info.baseRefName,
+      mergedAt: info.mergedAt ?? null,
     };
   }
 
   private formatSearchMessage(info: PullRequestNode): SearchPullRequest {
     let message = `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}`;
+    if (info.mergedAt) {
+      message += `\n*Merged*: ${info.mergedAt}`;
+    }
 
     if (
       info.bodyText.includes('Task') &&
@@ -512,6 +592,7 @@ export class GithubService {
       pullRequest: message,
       labels: info.labels.edges.map((edge) => edge.node.name),
       baseBranch: info.baseRefName,
+      mergedAt: info.mergedAt ?? null,
     };
   }
 

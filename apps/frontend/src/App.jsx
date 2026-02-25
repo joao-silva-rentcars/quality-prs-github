@@ -36,7 +36,8 @@ function App() {
     const urlMatch = text.match(/https?:\/\/\S+/)
     const url = urlMatch ? urlMatch[0] : ''
     const titleMatch = text.match(/\*Title:\*\s(.+)\n\*PullRequest:\*/s)
-    const createdMatch = text.match(/\*Created\*:\s(.+)\n\*Task\*:/s)
+    const createdMatch = text.match(/\*Created\*:\s(.+?)(?:\n|$)/s)
+    const mergedMatch = text.match(/\*Merged\*:\s(.+?)(?:\n|$)/s)
     const taskMatch = text.match(/\*Task\*:\s([\s\S]*?)\n\*Description:\*/s)
     const descriptionMatch = text.match(/\*Description:\*\s([\s\S]*)/s)
 
@@ -44,6 +45,7 @@ function App() {
       title: titleMatch ? titleMatch[1].trim() : 'Pull request',
       url,
       createdAt: createdMatch ? createdMatch[1].trim() : '',
+      mergedAt: mergedMatch ? mergedMatch[1].trim() : '',
       task: taskMatch ? taskMatch[1].trim() : '',
       description: descriptionMatch ? descriptionMatch[1].trim() : '',
     }
@@ -51,6 +53,20 @@ function App() {
 
   const normalizeLabels = (labels) =>
     Array.isArray(labels) ? labels.filter(Boolean) : []
+
+  const formatDate = (iso) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      return d.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+    } catch {
+      return iso
+    }
+  }
 
   const toggleLabel = (label) => {
     setSelectedLabels((current) =>
@@ -223,7 +239,13 @@ function App() {
               </select>
             </div>
             <div className="field">
-              <label>Data de criação (de)</label>
+              <label>
+                {state === 'merged'
+                  ? 'Data de merge (de)'
+                  : state === 'closed'
+                    ? 'Data de fechamento (de)'
+                    : 'Data de criação (de)'}
+              </label>
               <input
                 type="date"
                 value={createdFrom}
@@ -231,7 +253,13 @@ function App() {
               />
             </div>
             <div className="field">
-              <label>Data de criação (até)</label>
+              <label>
+                {state === 'merged'
+                  ? 'Data de merge (até)'
+                  : state === 'closed'
+                    ? 'Data de fechamento (até)'
+                    : 'Data de criação (até)'}
+              </label>
               <input
                 type="date"
                 value={createdTo}
@@ -288,6 +316,12 @@ function App() {
                             {parsed.createdAt && (
                               <p className="muted">
                                 Criado em {parsed.createdAt}
+                              </p>
+                            )}
+                            {(item.mergedAt || parsed.mergedAt) && (
+                              <p className="muted">
+                                Mergeado em{' '}
+                                {formatDate(item.mergedAt || parsed.mergedAt)}
                               </p>
                             )}
                             {parsed.task && (

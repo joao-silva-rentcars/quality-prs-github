@@ -25,6 +25,7 @@ export interface PullRequestMessageDto {
     pullRequest: string;
     labels?: string[];
     baseBranch?: string;
+    mergedAt?: string | null;
 }
 export interface PullRequestGroupDto {
     repository: string;

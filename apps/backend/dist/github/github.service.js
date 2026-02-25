@@ -81,10 +81,50 @@ let GithubService = class GithubService {
         return format ? this.formatPullRequestResult(result) : rawResult;
     }
     async getPullRequestsBySearch(filters, format = true) {
-        const query = this.buildPullRequestBodyFromFilters(filters);
-        const result = await this.executeGraphqlQuery(query);
+        const noRepoSelected = !filters.repo?.trim();
+        const noLabelsSelected = !filters.labels || filters.labels.length === 0;
+        if (noRepoSelected && noLabelsSelected) {
+            const results = await Promise.all(ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })));
+            const merged = this.mergeSearchResults(results);
+            const rawResult = merged;
+            return format ? this.formatSearchResult(merged, filters) : rawResult;
+        }
+        const result = await this.fetchSearchWithPagination(filters);
         const rawResult = result;
         return format ? this.formatSearchResult(result, filters) : rawResult;
+    }
+    async fetchSearchWithPagination(filters) {
+        const allEdges = [];
+        const maxPages = 5;
+        let after = null;
+        for (let page = 0; page < maxPages; page++) {
+            const query = this.buildPullRequestBodyFromFilters(filters, after);
+            const result = await this.executeGraphqlQuery(query);
+            const edges = result.data?.search?.edges ?? [];
+            allEdges.push(...edges);
+            const hasNextPage = result.data?.search?.pageInfo?.hasNextPage;
+            const endCursor = result.data?.search?.pageInfo?.endCursor;
+            if (!hasNextPage || !endCursor || edges.length < 100) {
+                break;
+            }
+            after = endCursor;
+        }
+        return { data: { search: { edges: allEdges } } };
+    }
+    async searchByRepo(filters) {
+        return this.fetchSearchWithPagination(filters);
+    }
+    mergeSearchResults(responses) {
+        const allEdges = [];
+        for (const res of responses) {
+            const edges = res.data?.search?.edges ?? [];
+            allEdges.push(...edges);
+        }
+        return {
+            data: {
+                search: { edges: allEdges },
+            },
+        };
     }
     mapUser(user) {
         return {
@@ -117,16 +157,19 @@ let GithubService = class GithubService {
     buildPullRequestBody() {
         return {
             query: '{ search(query: "org:Rentcars is:pr is:open user:Rentcars label:tested", type: ISSUE, last: 50) ' +
-                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
+                '{ edges { node { ... on PullRequest { number createdAt mergedAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
                 '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
         };
     }
-    buildPullRequestBodyFromFilters(filters) {
+    buildPullRequestBodyFromFilters(filters, after) {
         const queryString = this.escapeGraphqlQuery(this.buildSearchQuery(filters));
+        const afterArg = after
+            ? `, after: "${this.escapeGraphqlQuery(after)}"`
+            : '';
         return {
-            query: `{ search(query: "${queryString}", type: ISSUE, last: 50) ` +
-                '{ edges { node { ... on PullRequest { number createdAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
-                '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } } }',
+            query: `{ search(query: "${queryString}", type: ISSUE, first: 100${afterArg}) ` +
+                '{ edges { node { ... on PullRequest { number createdAt mergedAt url title bodyText baseRefName baseRepository { name } labels(first: 10) ' +
+                '{ edges { node { name } } } files { totalCount } reviews { totalCount } mergeable mergeStateStatus } } } pageInfo { endCursor hasNextPage } } }',
         };
     }
     async executeGraphqlQuery(query) {
@@ -185,9 +228,14 @@ let GithubService = class GithubService {
                 }
             }
         }
-        const createdRange = this.buildDateRange('created', filters.createdFrom, filters.createdTo);
-        if (createdRange) {
-            parts.push(createdRange);
+        const dateField = filters.state === 'merged'
+            ? 'merged'
+            : filters.state === 'closed'
+                ? 'closed'
+                : 'created';
+        const dateRange = this.buildDateRange(dateField, filters.createdFrom, filters.createdTo);
+        if (dateRange) {
+            parts.push(dateRange);
         }
         const updatedRange = this.buildDateRange('updated', filters.updatedFrom, filters.updatedTo);
         if (updatedRange) {
@@ -311,10 +359,14 @@ let GithubService = class GithubService {
             number: info.number,
             pullRequest: `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}\n*Task*: ${taskPart}\n*Description:* ${descPart}`,
             baseBranch: info.baseRefName,
+            mergedAt: info.mergedAt ?? null,
         };
     }
     formatSearchMessage(info) {
         let message = `*Title:* ${info.title}\n*PullRequest:* ${info.url}\n*Created*: ${info.createdAt}`;
+        if (info.mergedAt) {
+            message += `\n*Merged*: ${info.mergedAt}`;
+        }
         if (info.bodyText.includes('Task') &&
             info.bodyText.includes('Description')) {
             const [taskPart, descPart] = info.bodyText
@@ -327,6 +379,7 @@ let GithubService = class GithubService {
             pullRequest: message,
             labels: info.labels.edges.map((edge) => edge.node.name),
             baseBranch: info.baseRefName,
+            mergedAt: info.mergedAt ?? null,
         };
     }
     normalizeRepoFilter(repo) {
