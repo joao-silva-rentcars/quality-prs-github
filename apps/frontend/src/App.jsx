@@ -15,6 +15,7 @@ function App() {
   const [createdFrom, setCreatedFrom] = useState('')
   const [createdTo, setCreatedTo] = useState('')
   const [environment, setEnvironment] = useState('')
+  const [squad, setSquad] = useState('')
   const [selectedLabels, setSelectedLabels] = useState([])
 
   const labelOptions = [
@@ -38,6 +39,7 @@ function App() {
     'reviewed',
     'Special case',
     'Squad Architecture',
+    'Squad Apps',
     'Squad BackOffice',
     'Squad Catalog',
     'Squad Partners',
@@ -45,6 +47,14 @@ function App() {
     'Squad Setup',
     'tested',
     'warning',
+  ]
+  const squadOptions = [
+    { value: '', label: 'Todas as squads' },
+    { value: 'Backoffice', label: 'Backoffice' },
+    { value: 'Partners', label: 'Partners' },
+    { value: 'Pay', label: 'Pay' },
+    { value: 'Catalog', label: 'Catalog' },
+    { value: 'APPs', label: 'APPs' },
   ]
   const repoOptions = [
     { value: '', label: 'Todos os repositórios' },
@@ -123,6 +133,7 @@ function App() {
   const buildSearchParams = () => {
     const params = new URLSearchParams()
     if (org) params.set('org', org)
+    if (squad) params.set('squad', squad)
     if (repo) params.set('repo', repo)
     if (state) params.set('state', state)
     if (selectedLabels.length > 0) {
@@ -244,6 +255,19 @@ function App() {
                 onChange={(event) => setOrg(event.target.value)}
               >
                 <option value="Rentcars">Rentcars</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Squad</label>
+              <select
+                value={squad}
+                onChange={(event) => setSquad(event.target.value)}
+              >
+                {squadOptions.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="field">

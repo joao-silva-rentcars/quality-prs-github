@@ -39,6 +39,7 @@ let GithubController = class GithubController {
             org: query.org,
             user: query.user,
             repo: query.repo,
+            squad: query.squad,
             state: query.state,
             labels,
             environment: query.environment,

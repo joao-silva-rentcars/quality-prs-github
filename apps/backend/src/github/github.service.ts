@@ -42,6 +42,62 @@ const ALLOWED_REPOS = [
   'vehicle-search',
 ];
 
+/** Repositórios por Squad (conforme planilha) */
+const SQUAD_REPOS: Record<string, string[]> = {
+  Backoffice: [
+    'marketplace',
+    'rentcars',
+    'operation-front',
+    'admin-produto',
+    'bidw',
+    'loyalty',
+  ],
+  Partners: [
+    'back-commercial',
+    'front-commercial',
+    'booking-api',
+    'partners',
+    'vehicle-search',
+    'fortune-front',
+    'rentcars',
+    'integrator-node',
+    'partner-integrator',
+    'site',
+    'front-mobile',
+    'components',
+  ],
+  Pay: [
+    'site',
+    'front-mobile',
+    'rentcars',
+    'components',
+    'facade-mobile',
+    'fortune-back',
+    'fortune-front',
+    'operation-front',
+  ],
+  Catalog: [
+    'rentcars',
+    'site',
+    'components',
+    'front-mobile',
+    'design-system',
+    'responsive-entrypages',
+    'responsive-entrypages-backend',
+    'rentcars-site',
+  ],
+  APPs: ['app-android', 'app-ios'],
+};
+
+/** Label do GitHub correspondente a cada Squad */
+const SQUAD_LABELS: Record<string, string> = {
+  Backoffice: 'Squad BackOffice',
+  Partners: 'Squad Partners',
+  Pay: 'Squad Pay',
+  Catalog: 'Squad Catalog',
+  APPs: 'Squad Apps',
+};
+
 interface SearchPageInfo {
   endCursor?: string | null;
   hasNextPage?: boolean;
@@ -134,6 +190,7 @@ interface PullRequestSearchFilters {
   org?: string;
   user?: string;
   repo?: string;
+  squad?: string;
   state?: 'open' | 'closed' | 'merged';
   labels?: string[];
   environment?: string;
@@ -203,22 +260,43 @@ export class GithubService {
     filters: PullRequestSearchFilters,
     format = true,
   ): Promise<PullRequestResponseDto> {
-    const noRepoSelected = !filters.repo?.trim();
+    const squadSelected = !!filters.squad?.trim();
+    const repoSelected = !!filters.repo?.trim();
     const noLabelsSelected = !filters.labels || filters.labels.length === 0;
 
-    if (noRepoSelected && noLabelsSelected) {
+    const squadRepos = squadSelected
+      ? (SQUAD_REPOS[filters.squad!] ?? []).filter((r) =>
+          ALLOWED_REPOS.includes(r),
+        )
+      : null;
+
+    if (squadSelected && squadRepos && squadRepos.length > 0) {
+      const squadLabel = SQUAD_LABELS[filters.squad!];
+      const filtersWithSquadLabel = squadLabel
+        ? { ...filters, labels: [...(filters.labels ?? []), squadLabel] }
+        : filters;
       const results = await Promise.all(
-        ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })),
+        squadRepos.map((repo) =>
+          this.searchByRepo({ ...filtersWithSquadLabel, repo }),
+        ),
       );
       const merged = this.mergeSearchResults(results);
       const rawResult = merged as Record<string, unknown>;
       return format ? this.formatSearchResult(merged, filters) : rawResult;
     }
 
-    const result = await this.fetchSearchWithPagination(filters);
-    const rawResult = result as Record<string, unknown>;
+    if (repoSelected || !noLabelsSelected) {
+      const result = await this.fetchSearchWithPagination(filters);
+      const rawResult = result as Record<string, unknown>;
+      return format ? this.formatSearchResult(result, filters) : rawResult;
+    }
 
-    return format ? this.formatSearchResult(result, filters) : rawResult;
+    const results = await Promise.all(
+      ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })),
+    );
+    const merged = this.mergeSearchResults(results);
+    const rawResult = merged as Record<string, unknown>;
+    return format ? this.formatSearchResult(merged, filters) : rawResult;
   }
 
   private async fetchSearchWithPagination(
@@ -234,7 +312,7 @@ export class GithubService {
 
     for (const branch of branchesToQuery) {
       const branchFilters = branch
-        ? { ...filters, environmentOverride: branch }
+        ? { ...filters, environmentBaseBranch: branch }
         : filters;
       let after: string | null = null;
 
@@ -542,7 +620,7 @@ export class GithubService {
       const message = this.formatSearchMessage(info);
       const rawRepoName = info.baseRepository?.name ?? '';
       const repository = rawRepoName.includes('/')
-        ? rawRepoName.split('/').pop() ?? rawRepoName
+        ? (rawRepoName.split('/').pop() ?? rawRepoName)
         : rawRepoName;
       const repositoryKey = (repository || '').toLowerCase().trim();
 

@@ -4,6 +4,7 @@ interface PullRequestSearchFilters {
     org?: string;
     user?: string;
     repo?: string;
+    squad?: string;
     state?: 'open' | 'closed' | 'merged';
     labels?: string[];
     environment?: string;

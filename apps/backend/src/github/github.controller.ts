@@ -9,6 +9,7 @@ interface PullRequestSearchQuery {
   org?: string;
   user?: string;
   repo?: string;
+  squad?: string;
   state?: 'open' | 'closed' | 'merged';
   labels?: string;
   environment?: string;
@@ -53,6 +54,7 @@ export class GithubController {
         org: query.org,
         user: query.user,
         repo: query.repo,
+        squad: query.squad,
         state: query.state,
         labels,
         environment: query.environment,

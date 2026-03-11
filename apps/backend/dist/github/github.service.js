@@ -45,6 +45,58 @@ const ALLOWED_REPOS = [
     'site',
     'vehicle-search',
 ];
+const SQUAD_REPOS = {
+    Backoffice: [
+        'marketplace',
+        'rentcars',
+        'operation-front',
+        'admin-produto',
+        'bidw',
+        'loyalty',
+    ],
+    Partners: [
+        'back-commercial',
+        'front-commercial',
+        'booking-api',
+        'partners',
+        'vehicle-search',
+        'fortune-front',
+        'rentcars',
+        'integrator-node',
+        'partner-integrator',
+        'site',
+        'front-mobile',
+        'components',
+    ],
+    Pay: [
+        'site',
+        'front-mobile',
+        'rentcars',
+        'components',
+        'facade-mobile',
+        'fortune-back',
+        'fortune-front',
+        'operation-front',
+    ],
+    Catalog: [
+        'rentcars',
+        'site',
+        'components',
+        'front-mobile',
+        'design-system',
+        'responsive-entrypages',
+        'responsive-entrypages-backend',
+        'rentcars-site',
+    ],
+    APPs: ['app-android', 'app-ios'],
+};
+const SQUAD_LABELS = {
+    Backoffice: 'Squad BackOffice',
+    Partners: 'Squad Partners',
+    Pay: 'Squad Pay',
+    Catalog: 'Squad Catalog',
+    APPs: 'Squad Apps',
+};
 const ENVIRONMENT_BRANCHES = {
     Production: ['main', 'master', 'Production', 'Master'],
     Stage: ['staging', 'stage'],
@@ -97,17 +149,31 @@ let GithubService = class GithubService {
         return format ? this.formatPullRequestResult(result) : rawResult;
     }
     async getPullRequestsBySearch(filters, format = true) {
-        const noRepoSelected = !filters.repo?.trim();
+        const squadSelected = !!filters.squad?.trim();
+        const repoSelected = !!filters.repo?.trim();
         const noLabelsSelected = !filters.labels || filters.labels.length === 0;
-        if (noRepoSelected && noLabelsSelected) {
-            const results = await Promise.all(ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })));
+        const squadRepos = squadSelected
+            ? (SQUAD_REPOS[filters.squad] ?? []).filter((r) => ALLOWED_REPOS.includes(r))
+            : null;
+        if (squadSelected && squadRepos && squadRepos.length > 0) {
+            const squadLabel = SQUAD_LABELS[filters.squad];
+            const filtersWithSquadLabel = squadLabel
+                ? { ...filters, labels: [...(filters.labels ?? []), squadLabel] }
+                : filters;
+            const results = await Promise.all(squadRepos.map((repo) => this.searchByRepo({ ...filtersWithSquadLabel, repo })));
             const merged = this.mergeSearchResults(results);
             const rawResult = merged;
             return format ? this.formatSearchResult(merged, filters) : rawResult;
         }
-        const result = await this.fetchSearchWithPagination(filters);
-        const rawResult = result;
-        return format ? this.formatSearchResult(result, filters) : rawResult;
+        if (repoSelected || !noLabelsSelected) {
+            const result = await this.fetchSearchWithPagination(filters);
+            const rawResult = result;
+            return format ? this.formatSearchResult(result, filters) : rawResult;
+        }
+        const results = await Promise.all(ALLOWED_REPOS.map((repo) => this.searchByRepo({ ...filters, repo })));
+        const merged = this.mergeSearchResults(results);
+        const rawResult = merged;
+        return format ? this.formatSearchResult(merged, filters) : rawResult;
     }
     async fetchSearchWithPagination(filters) {
         const isProduction = filters.environment === 'Production';
@@ -118,7 +184,7 @@ let GithubService = class GithubService {
         const seenPrKeys = new Set();
         for (const branch of branchesToQuery) {
             const branchFilters = branch
-                ? { ...filters, environmentOverride: branch }
+                ? { ...filters, environmentBaseBranch: branch }
                 : filters;
             let after = null;
             for (let page = 0; page < 5; page++) {
@@ -344,7 +410,7 @@ let GithubService = class GithubService {
             const message = this.formatSearchMessage(info);
             const rawRepoName = info.baseRepository?.name ?? '';
             const repository = rawRepoName.includes('/')
-                ? rawRepoName.split('/').pop() ?? rawRepoName
+                ? (rawRepoName.split('/').pop() ?? rawRepoName)
                 : rawRepoName;
             const repositoryKey = (repository || '').toLowerCase().trim();
             if (selectedRepo && repositoryKey !== selectedRepo) {
