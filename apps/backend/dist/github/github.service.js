@@ -216,9 +216,19 @@ let GithubService = class GithubService {
     }
     mergeSearchResults(responses) {
         const allEdges = [];
+        const seenKeys = new Set();
         for (const res of responses) {
             const edges = res.data?.search?.edges ?? [];
-            allEdges.push(...edges);
+            for (const edge of edges) {
+                if (!edge)
+                    continue;
+                const info = this.isPullRequestEdge(edge) ? edge.node : edge;
+                const key = `${info.baseRepository?.name ?? ''}-${info.number}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    allEdges.push(edge);
+                }
+            }
         }
         return {
             data: {
@@ -436,11 +446,10 @@ let GithubService = class GithubService {
                     }
                 }
             }
-            if (pullRequestsMap.has(repository)) {
-                pullRequestsMap.get(repository)?.push(message);
-            }
-            else {
-                pullRequestsMap.set(repository, [message]);
+            const existing = pullRequestsMap.get(repository) ?? [];
+            const alreadyAdded = existing.some((p) => p.number === message.number);
+            if (!alreadyAdded) {
+                pullRequestsMap.set(repository, [...existing, message]);
             }
         }
         return Array.from(pullRequestsMap, ([repository, pullRequests]) => ({
