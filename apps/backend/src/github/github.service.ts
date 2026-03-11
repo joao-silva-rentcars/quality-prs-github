@@ -14,16 +14,32 @@ const TESTED_LABEL = 'tested';
 const SPECIAL_CASE_LABELS = ['special case'];
 const DEFAULT_ORG = 'Rentcars';
 const ALLOWED_REPOS = [
-  'rentcars',
-  'site',
-  'front-mobile',
-  'rentcars-site',
-  'qa-automation-web',
+  'admin-produto',
   'app-android',
-  'components',
   'app-ios',
+  'back-commercial',
+  'bidw',
   'booking-api',
+  'components',
+  'design-system',
+  'facade-mobile',
+  'fortune-back',
+  'fortune-front',
+  'front-commercial',
+  'front-mobile',
+  'integrator-node',
+  'loyalty',
+  'marketplace',
+  'operation-front',
+  'partner-integrator',
+  'partners',
+  'qa-automation-web',
+  'rentcars',
+  'rentcars-site',
   'responsive-entrypages',
+  'responsive-entrypages-backend',
+  'site',
+  'vehicle-search',
 ];
 
 interface SearchPageInfo {
@@ -121,6 +137,8 @@ interface PullRequestSearchFilters {
   state?: 'open' | 'closed' | 'merged';
   labels?: string[];
   environment?: string;
+  /** Sobrescreve o branch da query (ex: busca Production com main e master) */
+  environmentBaseBranch?: string;
   createdFrom?: string;
   createdTo?: string;
   updatedFrom?: string;
@@ -206,23 +224,46 @@ export class GithubService {
   private async fetchSearchWithPagination(
     filters: PullRequestSearchFilters,
   ): Promise<GraphqlSearchResponse> {
+    const isProduction = filters.environment === 'Production';
+    const branchesToQuery: (string | null)[] = isProduction
+      ? ['main', 'master']
+      : [null];
+
     const allEdges: Array<PullRequestEdge | PullRequestNode | null> = [];
-    const maxPages = 5;
-    let after: string | null = null;
+    const seenPrKeys = new Set<string>();
 
-    for (let page = 0; page < maxPages; page++) {
-      const query = this.buildPullRequestBodyFromFilters(filters, after);
-      const result = await this.executeGraphqlQuery(query);
-      const edges = result.data?.search?.edges ?? [];
-      allEdges.push(...edges);
+    for (const branch of branchesToQuery) {
+      const branchFilters = branch
+        ? { ...filters, environmentOverride: branch }
+        : filters;
+      let after: string | null = null;
 
-      const hasNextPage = result.data?.search?.pageInfo?.hasNextPage;
-      const endCursor = result.data?.search?.pageInfo?.endCursor;
+      for (let page = 0; page < 5; page++) {
+        const query = this.buildPullRequestBodyFromFilters(
+          branchFilters,
+          after,
+        );
+        const result = await this.executeGraphqlQuery(query);
+        const edges = result.data?.search?.edges ?? [];
 
-      if (!hasNextPage || !endCursor || edges.length < 100) {
-        break;
+        for (const edge of edges) {
+          if (!edge) continue;
+          const info = this.isPullRequestEdge(edge) ? edge.node : edge;
+          const key = `${info.baseRepository?.name}-${info.number}`;
+          if (!seenPrKeys.has(key)) {
+            seenPrKeys.add(key);
+            allEdges.push(edge);
+          }
+        }
+
+        const hasNextPage = result.data?.search?.pageInfo?.hasNextPage;
+        const endCursor = result.data?.search?.pageInfo?.endCursor;
+
+        if (!hasNextPage || !endCursor || edges.length < 100) {
+          break;
+        }
+        after = endCursor;
       }
-      after = endCursor;
     }
 
     return { data: { search: { edges: allEdges } } };
@@ -366,7 +407,9 @@ export class GithubService {
     }
 
     if (filters.environment) {
-      const queryBranch = ENVIRONMENT_QUERY_BRANCH[filters.environment];
+      const queryBranch =
+        filters.environmentBaseBranch ??
+        ENVIRONMENT_QUERY_BRANCH[filters.environment];
       if (queryBranch) {
         parts.push(`base:${queryBranch}`);
       }
@@ -497,8 +540,11 @@ export class GithubService {
         ? edge.node
         : edge;
       const message = this.formatSearchMessage(info);
-      const repository = info.baseRepository.name;
-      const repositoryKey = repository.toLowerCase();
+      const rawRepoName = info.baseRepository?.name ?? '';
+      const repository = rawRepoName.includes('/')
+        ? rawRepoName.split('/').pop() ?? rawRepoName
+        : rawRepoName;
+      const repositoryKey = (repository || '').toLowerCase().trim();
 
       if (selectedRepo && repositoryKey !== selectedRepo) {
         continue;
@@ -597,12 +643,13 @@ export class GithubService {
   }
 
   private normalizeRepoFilter(repo?: string): string | null {
-    if (!repo) {
+    if (!repo || typeof repo !== 'string') {
       return null;
     }
 
-    const repoValue = repo.includes('/') ? repo.split('/')[1] : repo;
-    return repoValue.toLowerCase();
+    const repoValue = repo.includes('/') ? repo.split('/').pop() : repo;
+    const normalized = (repoValue || '').trim().toLowerCase();
+    return normalized || null;
   }
 
   private isValidPullRequest(info: PullRequestNode): boolean {

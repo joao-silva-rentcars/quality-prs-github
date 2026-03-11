@@ -7,6 +7,7 @@ interface PullRequestSearchFilters {
     state?: 'open' | 'closed' | 'merged';
     labels?: string[];
     environment?: string;
+    environmentBaseBranch?: string;
     createdFrom?: string;
     createdTo?: string;
     updatedFrom?: string;
