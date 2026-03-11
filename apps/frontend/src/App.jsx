@@ -17,7 +17,35 @@ function App() {
   const [environment, setEnvironment] = useState('')
   const [selectedLabels, setSelectedLabels] = useState([])
 
-  const labelOptions = ['bug', 'bugfix', 'tested', 'special case']
+  const labelOptions = [
+    'bug',
+    'bugbuster',
+    'bugfix',
+    'BugQA',
+    'code-review',
+    'enhancement',
+    'environment',
+    'fast-delivery',
+    'hotfix',
+    'integration',
+    'needs-review',
+    'QA-Dircelia',
+    'QA-Hiramson',
+    'QA-João',
+    'QA-Luiz Lopes',
+    'QA-Pedro',
+    'QA-Vitória',
+    'reviewed',
+    'Special case',
+    'Squad Architecture',
+    'Squad BackOffice',
+    'Squad Catalog',
+    'Squad Partners',
+    'Squad Pay',
+    'Squad Setup',
+    'tested',
+    'warning',
+  ]
   const repoOptions = [
     { value: '', label: 'Todos os repositórios' },
     { value: 'rentcars', label: 'rentcars' },
